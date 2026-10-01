@@ -23,6 +23,8 @@ const API_URL =
 const MAX_HISTORY = 30;      // chat messages sent to the model
 const MAX_CHARS = 4000;      // per message
 const MAX_BODY = 1000000;    // bytes per request
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [1000, 2000];
 
 
 // ============================================================
@@ -111,21 +113,37 @@ async function askGemini(systemParts, chatMessages) {
 
     let apiResponse;
 
-    try {
-        apiResponse = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${API_KEY}`
-            },
-            body: JSON.stringify({ model: MODEL, messages }),
-            signal: AbortSignal.timeout(60000)
-        });
-    } catch (error) {
-        if (error.name === "TimeoutError") {
-            throw new Error("Gemini request timed out after 60 seconds.");
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+        try {
+            apiResponse = await fetch(API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${API_KEY}`
+                },
+                body: JSON.stringify({ model: MODEL, messages }),
+                signal: AbortSignal.timeout(60000)
+            });
+        } catch (error) {
+            if (error.name === "TimeoutError") {
+                throw new Error("Gemini request timed out after 60 seconds.");
+            }
+            throw new Error(`Could not connect to Gemini: ${error.message}`);
         }
-        throw new Error(`Could not connect to Gemini: ${error.message}`);
+
+        if (!RETRYABLE_STATUSES.has(apiResponse.status) || attempt === RETRY_DELAYS_MS.length) break;
+
+        const retryAfter = apiResponse.headers.get("retry-after");
+        const retryAfterValue = retryAfter
+            ? Number.isNaN(Number(retryAfter)) ? Date.parse(retryAfter) - Date.now() : Number(retryAfter) * 1000
+            : NaN;
+        const delay = Number.isFinite(retryAfterValue) && retryAfterValue > 0
+            ? Math.min(retryAfterValue, 10000)
+            : RETRY_DELAYS_MS[attempt];
+
+        console.warn(`Gemini returned HTTP ${apiResponse.status}; retrying in ${delay}ms.`);
+        await apiResponse.body?.cancel().catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
     const raw = await apiResponse.text();
