@@ -3,7 +3,6 @@ require("dotenv").config({ quiet: true });
 const express = require('express');
 const path = require('path');
 
-// Safe CORS handling if package fails to load
 let cors;
 try {
     cors = require('cors');
@@ -21,13 +20,13 @@ const DEMO_MODE = process.env.DEMO_MODE === "true";
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const MAX_HISTORY = 30;
 
-// Enable CORS and Body Parsing
+// Enable CORS and JSON parsing
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-// 1. Serve Static Frontend Files
-const staticPath = path.join(__dirname, '../frontend');
-app.use(express.static(staticPath));
+// 1. Resolve exact frontend folder path
+const frontendPath = path.resolve(__dirname, '..', 'frontend');
+app.use(express.static(frontendPath));
 
 // 2. Health Route
 app.get('/health', (req, res) => {
@@ -92,9 +91,9 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// 4. Fallback: Serve frontend/index.html for root and other non-API routes
+// 4. Fallback: Serve frontend index.html for root and all other routes
 app.get('*', (req, res) => {
-    res.sendFile(path.join(staticPath, 'index.html'));
+    res.sendFile(path.resolve(frontendPath, 'index.html'));
 });
 
 // Start Express Server
