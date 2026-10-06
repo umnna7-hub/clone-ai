@@ -35,19 +35,25 @@ npm install
 
 Create a file named .env in backend/:
 
+```dotenv
 GEMINI_API_KEY=your-key-here
+APP_ACCESS_TOKEN=replace-with-a-random-secret-at-least-32-characters-long
+```
 
-Alternatively, set the variable in your terminal for the current session only.
+Generate an access token with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+Alternatively, set both variables in your terminal for the current session only.
 
 PowerShell
 
 powershell
 $env:GEMINI_API_KEY = "your-key-here"
+$env:APP_ACCESS_TOKEN = "paste-the-generated-32-character-or-longer-secret-here"
 
 macOS / Linux
 
 bash
 export GEMINI_API_KEY="your-key-here"
+export APP_ACCESS_TOKEN="paste-the-generated-32-character-or-longer-secret-here"
 
 Never commit your key. Add .env to .gitignore.
 
@@ -57,17 +63,12 @@ node server.js
 
 Expected output:
 
-API key detected: true
-Backend running at http://localhost:3001
-4. Open the frontend
+Server running successfully on port 3001
+4. Open the app
 
-Open frontend/index.html in your browser. The default backend URL is http://localhost:3001; change it from Settings if needed. To serve the frontend instead:
+Visit http://localhost:3001. The backend serves the frontend and API from the same origin. In Settings, enter the `APP_ACCESS_TOKEN` value you configured above.
 
-bash
-cd frontend
-python -m http.server 5500     # then visit http://localhost:5500
-
-The status under the teacher's name should show a green dot and Online.
+The deployed origin is selected automatically when the app is served over HTTP(S). If you host the frontend separately, set the backend URL and access token in Settings, and configure `FRONTEND_ORIGIN` on the backend.
 
 Configuration
 
@@ -75,11 +76,13 @@ Backend environment variables:
 
 Variable	Default	Purpose
 GEMINI_API_KEY	none (required)	Your Google Gemini API key
-GEMINI_MODEL	gemini-3.5-flash-lite	Model name. Change it to one your account can use
+APP_ACCESS_TOKEN	none (required)	Shared bearer token; must be at least 32 characters
+FRONTEND_ORIGIN	unset	Optional exact origin allowed to call the API cross-origin; unset disables cross-origin access
+GEMINI_MODEL	gemini-1.5-flash	Model name. Change it to one your account can use
 PORT	3001	Server port
 DEMO_MODE	false	If true, returns placeholder replies when the Gemini request fails
 
-Frontend: configure the backend URL and other preferences in Settings.
+Frontend: configure the backend URL, app access token, and other preferences in Settings. The access token is stored in that browser's local storage; only use it over HTTPS and avoid shared devices.
 
 API reference
 GET /health
@@ -91,8 +94,7 @@ json
   "status": "online",
   "service": "Teacher AI Backend",
   "provider": "google-gemini",
-  "model": "gemini-3.5-flash-lite",
-  "apiKeyDetected": true,
+  "model": "gemini-1.5-flash",
   "demoMode": false
 }
 POST /api/chat
@@ -105,16 +107,15 @@ json
     { "role": "user", "content": "Explain encapsulation in Java" }
   ]
 }
-messages must be a non-empty array
-Allowed roles: user, assistant, system, developer
-Each content must be a non-empty string
+Send `Authorization: Bearer <APP_ACCESS_TOKEN>`.
+`messages` must contain 1–30 items. Allowed roles are `user` and `assistant`; each content must be a non-empty string of at most 4,000 characters. The server adds its own teacher personality prompt.
 
 Success (200):
 
 json
 { "reply": "…", "mode": "gemini" }
 
-Errors: 400 for invalid input, 502 if the Gemini request fails ({ "error", "message" }).
+Errors: 400 for invalid input, 401 for missing/invalid access token, 429 for rate limits, and 502 if the Gemini request fails (`{ "error", "message" }`).
 
 Customizing the personality
 
@@ -133,14 +134,7 @@ Demo mode only activates after a Gemini request fails, so GEMINI_API_KEY still n
 
 Security notes
 
-This project is intended for local or classroom use. Before any public deployment:
-
-Restrict CORS to your own domain instead of *
-Accept only user and assistant roles from clients, so users can't override the personality
-Add rate limiting and message length and count limits
-Add authentication, since anyone who can reach the server can use your API credits
-Chat history is stored in browser localStorage; clear it from Settings on shared devices
-If a key is ever exposed, delete it and create a new one
+This project is intended for local or classroom use. The API requires an access token, accepts only user/assistant messages with bounded sizes, and limits each IP to 30 chat requests per 15 minutes. This is a shared token, not per-user authentication: anyone who receives it can use the API and its Gemini quota. Cross-origin requests are disabled by default; when hosting the frontend separately, set `FRONTEND_ORIGIN` to its exact HTTPS origin. The limiter uses in-memory state, so requests are counted per server instance. Chat history and the access token are stored in browser localStorage; clear them on shared devices. Never expose either secret, and rotate it immediately if exposed.
 Known limitations
 Replies arrive all at once (no streaming)
 Chat history is stored only in the browser (localStorage), not on the server

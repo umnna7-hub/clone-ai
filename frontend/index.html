@@ -250,7 +250,7 @@
       <section class="conversation" id="conversation" aria-live="polite"></section>
       <div class="composer-wrap">
         <form class="composer-box" id="chatForm">
-          <textarea class="composer" id="messageInput" rows="1" placeholder="Ask a question about programming..." aria-label="Message Mr. Saleem"></textarea>
+          <textarea class="composer" id="messageInput" rows="1" maxlength="4000" placeholder="Ask a question about programming..." aria-label="Message Mr. Saleem"></textarea>
           <div class="composer-tools"><span class="composer-hint" id="composerHint">Enter to send · Shift + Enter for a new line</span><button class="send-button" id="sendButton" type="submit" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24"><path d="M12 19V5m-7 7 7-7 7 7"/></svg></button></div>
         </form>
         <div class="disclaimer">AI can make mistakes. Check important information.</div>
@@ -264,12 +264,13 @@
       <label class="setting-field"><span class="setting-label">Your name</span><input class="setting-input" id="nameSetting" maxlength="40" placeholder="Student"><span class="setting-help">Used to personalize the teacher's replies.</span></label>
       <label class="setting-field"><span class="setting-label">Appearance</span><select class="setting-input setting-select" id="themeSetting"><option value="system">Use device setting</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       <label class="setting-field"><span class="setting-label">Backend URL</span><input class="setting-input" id="apiSetting" type="url" required placeholder="http://localhost:3001"><span class="setting-help">Address where the chat backend is running.</span></label>
+      <label class="setting-field"><span class="setting-label">App access token</span><input class="setting-input" id="accessTokenSetting" type="password" autocomplete="new-password" placeholder="Ask the app owner for the access token"><span class="setting-help">Required by the server. Stored in this browser's local storage; use HTTPS and don't share devices.</span></label>
       <div class="toggle-row"><div class="toggle-copy"><span class="setting-label">Enter to send</span><span class="setting-help">Use Shift + Enter for a new line.</span></div><input class="toggle" id="enterSetting" type="checkbox" aria-label="Use Enter to send"></div>
       <div class="setting-actions"><button class="text-button" type="button" id="clearHistory">Delete all chats</button><button class="save-button" type="submit">Save settings</button></div>
     </form>
   </section>
   <script>
-    const DEFAULT_SETTINGS = { name: "", theme: "system", apiUrl: "http://localhost:3001", enterToSend: true };
+    const DEFAULT_SETTINGS = { name: "", theme: "system", apiUrl: /^https?:$/.test(window.location.protocol) ? window.location.origin : "http://localhost:3001", accessToken: "", enterToSend: true };
     const HISTORY_KEY = "saleem-ai-history-v1";
     const SETTINGS_KEY = "saleem-ai-settings-v1";
     const STARTERS = ["Explain object-oriented programming with a Java example", "What is the difference between an interface and an abstract class?", "Help me understand inheritance", "Give me a small Java practice problem"];
@@ -433,8 +434,9 @@
       try {
         const url = `${settings.apiUrl.replace(/\/+$/, "")}/api/chat`;
         const payload = chat.messages.slice(-30).map((message) => ({ ...message }));
-        if (settings.name.trim()) payload.unshift({ role: "system", content: `The student's name is ${settings.name.trim()}. Address them by name naturally when appropriate.` });
-        const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: payload }) });
+        const headers = { "Content-Type": "application/json" };
+        if (settings.accessToken) headers.Authorization = `Bearer ${settings.accessToken}`;
+        const response = await fetch(url, { method: "POST", headers, body: JSON.stringify({ messages: payload, studentName: settings.name.trim() }) });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.message || data.error || `Request failed (${response.status})`);
         chat.messages.push({ role: "assistant", content: data.reply || "I didn't receive a response. Please try again." });
@@ -478,6 +480,7 @@
       $("#nameSetting").value = settings.name;
       $("#themeSetting").value = settings.theme;
       $("#apiSetting").value = settings.apiUrl;
+      $("#accessTokenSetting").value = settings.accessToken;
       $("#enterSetting").checked = settings.enterToSend;
       $("#settingsModal").classList.add("open");
       $("#backdrop").classList.add("open");
@@ -536,7 +539,7 @@
     $("#backdrop").addEventListener("click", () => { closeSettings(); closeSidebar(); });
     $("#settingsForm").addEventListener("submit", (event) => {
       event.preventDefault();
-      settings = { name: $("#nameSetting").value.trim(), theme: $("#themeSetting").value, apiUrl: $("#apiSetting").value.trim().replace(/\/+$/, ""), enterToSend: $("#enterSetting").checked };
+      settings = { name: $("#nameSetting").value.trim(), theme: $("#themeSetting").value, apiUrl: $("#apiSetting").value.trim().replace(/\/+$/, ""), accessToken: $("#accessTokenSetting").value.trim(), enterToSend: $("#enterSetting").checked };
       saveSettings();
       applySettings();
       closeSettings();
