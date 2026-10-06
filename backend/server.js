@@ -11,7 +11,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 const ACCESS_TOKEN = process.env.APP_ACCESS_TOKEN;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
