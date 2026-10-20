@@ -447,7 +447,8 @@
         try { data = JSON.parse(responseText); } catch {}
         if (!response.ok) {
           const detail = data.message || data.error || responseText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
-          throw new Error(detail ? `Request failed (${response.status}): ${detail}` : `Request failed (${response.status})`);
+          const requestId = data.requestId ? ` (request ID: ${data.requestId})` : "";
+          throw new Error(`${detail ? `Request failed (${response.status}): ${detail}` : `Request failed (${response.status})`}${requestId}`);
         }
         chat.messages.push({ role: "assistant", content: data.reply || "I didn't receive a response. Please try again." });
         chat.updatedAt = Date.now();

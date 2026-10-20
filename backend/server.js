@@ -4,14 +4,14 @@ require("dotenv").config({ path: path.resolve(__dirname, '.env'), quiet: true })
 const express = require('express');
 const cors = require('cors');
 const { rateLimit } = require('express-rate-limit');
-const { timingSafeEqual } = require('crypto');
+const { randomUUID, timingSafeEqual } = require('crypto');
 const personality = require('./personality');
 
 const app = express();
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 const ACCESS_TOKEN = process.env.APP_ACCESS_TOKEN;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
@@ -23,6 +23,9 @@ if (!ACCESS_TOKEN || ACCESS_TOKEN.length < 32) {
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const MAX_HISTORY = 30;
 const MAX_MESSAGE_LENGTH = 4000;
+const MAX_GEMINI_ATTEMPTS = 2;
+const GEMINI_TIMEOUT_MS = 45000;
+const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 app.set('trust proxy', 1);
 if (FRONTEND_ORIGIN) {
@@ -32,6 +35,21 @@ if (FRONTEND_ORIGIN) {
         allowedHeaders: ['Content-Type', 'Authorization']
     }));
 }
+app.use((req, res, next) => {
+    if (req.path !== '/api/chat') {
+        return next();
+    }
+
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    res.set('X-Request-Id', requestId);
+    console.info(`[${requestId}] Chat request received`);
+    res.on('finish', () => {
+        console.info(`[${requestId}] Chat request completed with HTTP ${res.statusCode} in ${Date.now() - startedAt}ms`);
+    });
+    req.requestId = requestId;
+    next();
+});
 app.use(express.json({ limit: '256kb' }));
 
 const frontendPath = path.resolve(__dirname, '..', 'frontend');
@@ -75,29 +93,47 @@ async function askGemini(chatMessages) {
         throw new Error("GEMINI_API_KEY environment variable is missing.");
     }
 
-    const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${API_KEY}`
-        },
-        signal: AbortSignal.timeout(20000),
-        body: JSON.stringify({
-            model: MODEL,
-            messages: chatMessages
-        })
-    });
+    for (let attempt = 1; attempt <= MAX_GEMINI_ATTEMPTS; attempt++) {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${API_KEY}`
+            },
+            signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+            body: JSON.stringify({
+                model: MODEL,
+                messages: chatMessages
+            })
+        });
 
-    const data = await response.json();
+        const responseText = await response.text();
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch {
+            data = null;
+        }
 
-    if (!response.ok) {
-        const errorMessage = Array.isArray(data)
-            ? data[0]?.error?.message
-            : data.error?.message;
-        throw new Error(errorMessage || `Gemini API error (HTTP ${response.status})`);
+        if (!response.ok) {
+            const providerError = Array.isArray(data) ? data[0]?.error : data?.error;
+            const errorMessage = providerError?.message || `Gemini API error (HTTP ${response.status})`;
+            if (RETRYABLE_GEMINI_STATUSES.has(response.status) && attempt < MAX_GEMINI_ATTEMPTS) {
+                console.warn(`Gemini API returned HTTP ${response.status}; retrying request (${attempt}/${MAX_GEMINI_ATTEMPTS - 1}).`);
+                await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+                continue;
+            }
+            throw new Error(errorMessage);
+        }
+
+        if (!data) {
+            throw new Error(`Gemini API returned invalid JSON (HTTP ${response.status})`);
+        }
+
+        return data.choices?.[0]?.message?.content?.trim() || "No response received.";
     }
 
-    return data.choices?.[0]?.message?.content?.trim() || "No response received.";
+    throw new Error("Gemini API request failed after retries.");
 }
 
 app.post('/api/chat', chatRateLimit, requireAccessToken, async (req, res) => {
@@ -142,7 +178,8 @@ app.post('/api/chat', chatRateLimit, requireAccessToken, async (req, res) => {
         console.error("Gemini request failed:", message);
         res.status(502).json({
             error: "Gemini request failed",
-            message
+            message,
+            requestId: req.requestId
         });
     }
 });

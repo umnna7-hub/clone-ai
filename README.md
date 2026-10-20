@@ -79,7 +79,7 @@ Variable	Default	Purpose
 GEMINI_API_KEY	none (required)	Your Google Gemini API key
 APP_ACCESS_TOKEN	none (required)	Shared bearer token; must be at least 32 characters
 FRONTEND_ORIGIN	unset	Optional exact origin allowed to call the API cross-origin; unset disables cross-origin access
-GEMINI_MODEL	gemini-3.8-flash	Model name. Change it to one your account can use
+GEMINI_MODEL	gemini-3.5-flash	Model name. Change it to one your account can use
 PORT	3001	Server port
 DEMO_MODE	false	If true, returns placeholder replies when the Gemini request fails
 
@@ -95,7 +95,7 @@ json
   "status": "online",
   "service": "Teacher AI Backend",
   "provider": "google-gemini",
-  "model": "gemini-3.8-flash",
+  "model": "gemini-3.5-flash",
   "demoMode": false
 }
 POST /api/chat
@@ -130,6 +130,7 @@ Status shows "Server offline"	Start the backend, and check the backend URL in Se
 `Failed to fetch` or `NetworkError`	Check that the backend is running and the Backend URL in Settings is correct. If the frontend is hosted on a different origin, set `FRONTEND_ORIGIN` to that exact origin and restart the backend; do not use `file://`.
 `A valid access token is required.`	In Settings, enter the same `APP_ACCESS_TOKEN` configured for the backend.
 `Too many requests. Please try again in 15 minutes.`	Wait 15 minutes for the per-IP rate limit to reset.
+`Request failed (502)` with a request ID	Check the backend logs for that request ID. Gemini 429/5xx responses are retried once, with up to 45 seconds per attempt; provider overload can still cause a 502. A Cloudflare "Host Error" without a request ID may mean the request did not reach the backend. Check hosting health and runtime logs at the error time.
 API key detected: false	The key isn't set in this terminal, or dotenv isn't loaded in server.js
 Gemini quota or billing error	Check your Gemini API project and quota
 Error about the model	Set GEMINI_MODEL to a model your account can access
