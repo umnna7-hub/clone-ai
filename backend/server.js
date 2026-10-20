@@ -81,6 +81,7 @@ async function askGemini(chatMessages) {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${API_KEY}`
         },
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
             model: MODEL,
             messages: chatMessages
@@ -135,9 +136,13 @@ app.post('/api/chat', chatRateLimit, requireAccessToken, async (req, res) => {
                 mode: "demo"
             });
         }
+        const message = error.name === "TimeoutError"
+            ? "Gemini API request timed out. Please try again."
+            : error.message;
+        console.error("Gemini request failed:", message);
         res.status(502).json({
             error: "Gemini request failed",
-            message: error.message
+            message
         });
     }
 });
