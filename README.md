@@ -16,10 +16,10 @@ Live server status indicator and clear error messages
 Optional demo mode for testing without a working API
 Project structure
 clone-ai/
+├── package.json
 ├── backend/
 │   ├── server.js              # HTTP server + Gemini integration
 │   ├── personality.js         # Teacher system prompt
-│   ├── package.json
 │   └── package-lock.json
 └── frontend/
     └── index.html             # Chat UI, history, and settings
@@ -27,10 +27,11 @@ Requirements
 Node.js 18 or newer
 A Google Gemini API key
 Setup
-1. Install backend dependencies
+1. Install dependencies from the repository root (the folder containing `package.json`)
 bash
-cd backend
 npm install
+
+In Windows PowerShell, if script execution blocks `npm`, use `npm.cmd install` and `npm.cmd start` instead.
 2. Add your API key
 
 Create a file named .env in backend/:
@@ -57,9 +58,9 @@ export APP_ACCESS_TOKEN="paste-the-generated-32-character-or-longer-secret-here"
 
 Never commit your key. Add .env to .gitignore.
 
-3. Start the backend
+3. Start the backend from the repository root
 bash
-node server.js
+npm start
 
 Expected output:
 
@@ -78,7 +79,7 @@ Variable	Default	Purpose
 GEMINI_API_KEY	none (required)	Your Google Gemini API key
 APP_ACCESS_TOKEN	none (required)	Shared bearer token; must be at least 32 characters
 FRONTEND_ORIGIN	unset	Optional exact origin allowed to call the API cross-origin; unset disables cross-origin access
-GEMINI_MODEL	gemini-1.5-flash	Model name. Change it to one your account can use
+GEMINI_MODEL	gemini-3.8-flash	Model name. Change it to one your account can use
 PORT	3001	Server port
 DEMO_MODE	false	If true, returns placeholder replies when the Gemini request fails
 
@@ -94,7 +95,7 @@ json
   "status": "online",
   "service": "Teacher AI Backend",
   "provider": "google-gemini",
-  "model": "gemini-1.5-flash",
+  "model": "gemini-3.8-flash",
   "demoMode": false
 }
 POST /api/chat
@@ -116,6 +117,7 @@ json
 { "reply": "…", "mode": "gemini" }
 
 Errors: 400 for invalid input, 401 for missing/invalid access token, 429 for rate limits, and 502 if the Gemini request fails (`{ "error", "message" }`).
+The chat UI displays the API's `message` field when present. For example, a missing server key returns `{"error":"Gemini request failed","message":"GEMINI_API_KEY environment variable is missing."}`. Gemini provider failures return its error message, or `Gemini API error (HTTP <status>)` if the provider response has no message. A browser message such as `Failed to fetch` is different: it means the browser could not read an HTTP response, so there is no API response body or status to show.
 
 Customizing the personality
 
@@ -123,7 +125,11 @@ Edit backend/personality.js. The systemPrompt string controls tone, teaching sty
 
 Troubleshooting
 Problem	Fix
-Status shows "Server offline"	Start the backend, and check the backend URL in Settings
+Page URL starts with `file://`	Start the backend from the repository root with `npm.cmd start`, then open `http://localhost:3001` (do not open `frontend/index.html` directly). Serving the page and API from the same origin avoids browser CORS blocking.
+Status shows "Server offline"	Start the backend, and check the backend URL in Settings. Verify `http://localhost:3001/health` returns JSON with `"status":"online"`.
+`Failed to fetch` or `NetworkError`	Check that the backend is running and the Backend URL in Settings is correct. If the frontend is hosted on a different origin, set `FRONTEND_ORIGIN` to that exact origin and restart the backend; do not use `file://`.
+`A valid access token is required.`	In Settings, enter the same `APP_ACCESS_TOKEN` configured for the backend.
+`Too many requests. Please try again in 15 minutes.`	Wait 15 minutes for the per-IP rate limit to reset.
 API key detected: false	The key isn't set in this terminal, or dotenv isn't loaded in server.js
 Gemini quota or billing error	Check your Gemini API project and quota
 Error about the model	Set GEMINI_MODEL to a model your account can access

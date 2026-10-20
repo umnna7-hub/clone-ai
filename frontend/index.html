@@ -417,6 +417,10 @@
     async function sendMessage(rawText) {
       const text = rawText.trim();
       if (!text || waiting) return;
+      if (window.location.protocol === "file:") {
+        showError("This app is open directly from a file. Start the backend from the repository root with `npm.cmd start`, then open http://localhost:3001.");
+        return;
+      }
       let chat = currentChat();
       if (!chat) { createChat(); chat = currentChat(); }
       chat.messages.push({ role: "user", content: text });
@@ -431,6 +435,7 @@
       renderHistory();
       renderConversation();
       setComposerDisabled(true);
+      let errorMessage = "";
       try {
         const url = `${settings.apiUrl.replace(/\/+$/, "")}/api/chat`;
         const payload = chat.messages.slice(-30).map((message) => ({ ...message }));
@@ -442,13 +447,14 @@
         chat.messages.push({ role: "assistant", content: data.reply || "I didn't receive a response. Please try again." });
         chat.updatedAt = Date.now();
       } catch (error) {
-        showError(error.message || "Could not reach the backend. Check the backend URL in Settings.");
+        errorMessage = error.message || "Could not reach the backend. Check the backend URL in Settings.";
       } finally {
         waiting = false;
         setComposerDisabled(false);
         saveConversations();
         renderHistory();
         renderConversation();
+        if (errorMessage) showError(errorMessage);
         messageInput.focus();
       }
     }
@@ -511,6 +517,11 @@
     function openSidebar() { $("#sidebar").classList.add("open"); $("#backdrop").classList.add("open"); }
     function closeSidebar() { $("#sidebar").classList.remove("open"); if (!$("#settingsModal").classList.contains("open")) $("#backdrop").classList.remove("open"); }
     async function checkConnection() {
+      if (window.location.protocol === "file:") {
+        $("#statusText").textContent = "Open http://localhost:3001";
+        $("#statusDot").classList.add("offline");
+        return;
+      }
       try {
         const response = await fetch(`${settings.apiUrl.replace(/\/+$/, "")}/health`, { signal: AbortSignal.timeout(3500) });
         if (!response.ok) throw new Error("offline");
@@ -561,6 +572,7 @@
     renderHistory();
     renderConversation();
     checkConnection();
+    setInterval(checkConnection, 10000);
   </script>
 </body>
 </html>

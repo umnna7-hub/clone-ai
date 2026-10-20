@@ -1,7 +1,7 @@
-require("dotenv").config({ quiet: true });
+const path = require('path');
+require("dotenv").config({ path: path.resolve(__dirname, '.env'), quiet: true });
 
 const express = require('express');
-const path = require('path');
 const cors = require('cors');
 const { rateLimit } = require('express-rate-limit');
 const { timingSafeEqual } = require('crypto');
@@ -11,7 +11,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 const ACCESS_TOKEN = process.env.APP_ACCESS_TOKEN;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
@@ -90,7 +90,10 @@ async function askGemini(chatMessages) {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.error?.message || `Gemini API error (HTTP ${response.status})`);
+        const errorMessage = Array.isArray(data)
+            ? data[0]?.error?.message
+            : data.error?.message;
+        throw new Error(errorMessage || `Gemini API error (HTTP ${response.status})`);
     }
 
     return data.choices?.[0]?.message?.content?.trim() || "No response received.";
